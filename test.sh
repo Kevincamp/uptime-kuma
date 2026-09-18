@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 OUTPUT_PATH=""
 MODE=""
@@ -26,14 +25,17 @@ OUTPUT_PATH=${OUTPUT_PATH:-/tmp/test-output.xml}
 if [ "$MODE" = "base" ]; then
     # No baseline tests exist yet for Prometheus
     echo '<?xml version="1.0" encoding="UTF-8"?><testsuites></testsuites>' > "$OUTPUT_PATH"
+    exit 0
 elif [ "$MODE" = "new" ]; then
     # Run tests with JUnit XML reporter.
     # --import=tsx is required: server/prometheus.js requires ../src/util,
     # which is a .ts file that plain node cannot resolve without it.
+    # JUnit XML is written to $OUTPUT_PATH regardless of test pass/fail.
     node --import=tsx --test \
         --test-reporter=junit \
         --test-reporter-destination="$OUTPUT_PATH" \
         test/backend-test/test-prometheus_7a3996.js
+    exit $?
 else
     echo "Usage: $0 --output_path <path> <base|new>"
     exit 1
