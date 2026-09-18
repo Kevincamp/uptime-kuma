@@ -126,10 +126,11 @@ class Prometheus {
             }
 
             let tagValue = Prometheus.sanitizeForPrometheus(tag.value || "");
-            if (tagValue !== "") {
-                mappedTags[sanitizedTag].push(tagValue);
+            if (tagValue === "") {
+                tagValue = sanitizedTag
             }
-
+            
+            mappedTags[sanitizedTag].push(tagValue);
             mappedTags[sanitizedTag] = mappedTags[sanitizedTag].sort();
         });
 
