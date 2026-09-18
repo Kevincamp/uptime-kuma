@@ -110,35 +110,49 @@ class Prometheus {
 
     /**
      * Map the tags value to valid labels used in Prometheus. Sanitize them in the process.
+     *
+     * A Prometheus label can only hold a single scalar value. Two source tags can collide
+     * into the same label here in two ways: the same tag applied more than once to a
+     * monitor with different values (the "monitor_tag" table has no unique constraint on
+     * monitor+tag), or two distinct tag names that sanitize to the same label (e.g.
+     * "SSL Cert" and "SSL-Cert" both become "SSLCert"). Silently joining every colliding
+     * value (e.g. into an array later coerced to "a,b" by the Prometheus client) would
+     * break equality and presence filtering in PromQL the same way an empty value does, so
+     * collisions are resolved deterministically instead: an explicit value always wins over
+     * the name-only fallback, and among multiple explicit values the alphabetically first
+     * one wins, regardless of the order the tags were given in.
      * @param {Array<{name: string, value:?string}>} tags The tags to map
      * @returns {object} The mapped tags, usable as labels
      */
     mapTagsToLabels(tags) {
-        let mappedTags = {};
+        let mappedValues = {};
+        let hasExplicitValue = {};
+
         tags.forEach((tag) => {
             let sanitizedTag = Prometheus.sanitizeForPrometheus(tag.name);
             if (sanitizedTag === "") {
                 return; // Skip empty tag names
             }
 
-            if (mappedTags[sanitizedTag] === undefined) {
-                mappedTags[sanitizedTag] = [];
-            }
-
             let tagValue = Prometheus.sanitizeForPrometheus(tag.value || "");
-            if (tagValue === "") {
-                tagValue = sanitizedTag
+
+            if (tagValue !== "") {
+                if (!hasExplicitValue[sanitizedTag] || tagValue < mappedValues[sanitizedTag]) {
+                    mappedValues[sanitizedTag] = tagValue;
+                    hasExplicitValue[sanitizedTag] = true;
+                }
+            } else if (mappedValues[sanitizedTag] === undefined) {
+                // Name-only tag: fall back to the tag name itself so the label stays
+                // non-empty and distinguishable from an absent tag in PromQL.
+                mappedValues[sanitizedTag] = sanitizedTag;
             }
-            
-            mappedTags[sanitizedTag].push(tagValue);
-            mappedTags[sanitizedTag] = mappedTags[sanitizedTag].sort();
         });
 
         // Order the tags alphabetically
-        return Object.keys(mappedTags)
+        return Object.keys(mappedValues)
             .sort(this.sortTags)
             .reduce((obj, key) => {
-                obj[key] = mappedTags[key];
+                obj[key] = mappedValues[key];
                 return obj;
             }, {});
     }
